@@ -1,0 +1,28 @@
+{
+  "name": "pinstruct",
+  "version": "0.0.0",
+  "description": "Stream video and audio using WebRTC technologies. Model an online classroom environment",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/nglinh/pinstruct.git"
+  },
+  "keywords": [
+    "WebRTC",
+    "gsoc2014",
+    "mozzilla"
+  ],
+  "author": "Nguyen Hien Linh",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/nglinh/pinstruct/issues"
+  },
+  "homepage": "https://github.com/nglinh/pinstruct",
+  "devDependencies": {
+    "express": "~4.0.0-rc2",
+    "socket.io": "~0.9.16"
+  }
+}
