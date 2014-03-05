@@ -14,9 +14,8 @@ function onMediaSuccess(stream) {
             mediaRecorder.stop();
             var blob = new window.Blob([e.data], {
                     type: e.data.type || self.mimeType || 'audio/ogg' // It specifies the container format as well as the audio and video capture formats.
-                });            
-            document.getElementById("recorded").src = window.URL.createObjectURL(blob);
-            
+                });
+            document.getElementById("recorded").src = window.URL.createObjectURL(blob);            
         }
     }
     document.getElementById("start").onclick = function() {
