@@ -23,6 +23,7 @@
   "homepage": "https://github.com/nglinh/pinstruct",
   "devDependencies": {
     "express": "~4.0.0-rc2",
-    "socket.io": "~0.9.16"
+    "socket.io": "~0.9.16",
+    "jade": "~1.3.0"
   }
 }
