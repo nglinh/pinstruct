@@ -8,13 +8,10 @@ var receiveTextarea = document.getElementById("dataChannelReceive");
 sendButton.onclick = sendData;
 
 var isChannelReady;
-var isInitiator;
-var isStarted;
 var localStream;
-var pc;
-var remoteStream;
 var turnReady;
 var peersNum = 0;
+var sessionID2Peer = {} //hash session id to peer RTCPeerConnection object.
 var turnServer = {username: 'linh_nguyen_hien%40nus.edu.sg',
 turn: 'numb.viagenie.ca:3478',
 password: 'iamathere'};
@@ -41,33 +38,47 @@ if (room === '') {
 } else {
   //
 }
+var localVideo = document.querySelector('#localVideo');
 
 var socket = io.connect();
 
-if (room !== '') {
-  console.log('Create or join room', room);
-  socket.emit('create or join', room);
-}
 
 socket.on('created', function (room){
   console.log('Created room ' + room);
-  peersNum = 0;
-  isInitiator = true;
 });
 
 socket.on('full', function (room){
   console.log('Room ' + room + ' is full');
 });
 
-socket.on('join', function (room){
-  console.log('Another peer made a request to join room ' + room);
-  console.log('This peer is the initiator of room ' + room + '!');
+/*
+expected from server: 
+  {'room': room, 'id': socket.id} 
+where room is room name, id is sessionId of the new guy
+*/
+socket.on('join', function (data){
+  console.log('Another peer made a request to join room ' + data.room);
+  var peer = createPeerConnection(data.id);
+  sessionID2Peer[data.id] = peer;
   isChannelReady = true;
 });
 
-socket.on('joined', function (room){
-  console.log('This peer has joined room ' + room);
+/*
+expect from server:
+  {'room':room, 'peers': peers}
+where room is room name
+peers is an array of sessionId of other guy already in the room.
+*/
+socket.on('joined', function (data){
+  console.log('This peer has joined room ' + data.room);
   isChannelReady = true;
+  console.log(data);
+  for (var i in data.peers){
+    console.log(data.peers[i]);
+    var peer = createPeerConnection(data.peers[i]);
+    sessionID2Peer[data.peers[i]] = peer;
+  }
+  doCall();
 });
 
 socket.on('log', function (array){
@@ -81,38 +92,40 @@ function sendMessage(message){
   socket.emit('message', message);
 }
 
-socket.on('message', function (message){
-  console.log('Received message:', message);
-  if (message === 'got user media') {
-  	maybeStart();
-  } else if (message.type === 'offer') {
-    if (!isInitiator) {
-      maybeStart();
-    }
-    doAnswer(message);
-  } else if (message.type === 'answer') {
-    pc.setRemoteDescription(new RTCSessionDescription(message));
-  } else if (message.type === 'candidate') {
-    var candidate = new RTCIceCandidate({sdpMLineIndex:message.label,
-      sdpMid:message.id,
-      candidate:message.candidate});
-    pc.addIceCandidate(candidate);
-  } else if (message === 'bye') {
+/*
+expecting from server:
+{to: sessionID1, from: sessionID2, data: message}
+*/
+socket.on('message', function (msg){
+  console.log('Received message:', msg);
+  if (msg === 'bye'){
     handleRemoteHangup();
+  }
+  else if (msg.data.type === 'offer') {
+    doAnswer(msg);
+  } else if (msg.data.type === 'answer') {
+    var pc = sessionID2Peer[msg.from];
+    pc.setRemoteDescription(new RTCSessionDescription(msg.data));
+  } else if (msg.data.type === 'candidate') {      //assuming peers already in list.
+    var candidate = new RTCIceCandidate({sdpMLineIndex:msg.data.label,
+      sdpMid:msg.data.id,
+      candidate:msg.data.candidate});
+    var pc = sessionID2Peer[msg.from];
+    pc.addIceCandidate(candidate);
   }
 });
 
 ////////////////////////////////////////////////////
 
-var localVideo = document.querySelector('#localVideo');
+
 
 function handleUserMedia(stream) {
   localStream = stream;
   attachMediaStream(localVideo, stream);
   console.log('Adding local stream.');
-  sendMessage('got user media');
-  if (isInitiator) {
-    maybeStart();
+  if (room !== '') {
+    console.log('Create or join room', room);
+    socket.emit('create or join', room);
   }
 }
 
@@ -127,27 +140,20 @@ console.log('Getting user media with constraints', constraints);
 
 // requestTurn();
 
-function maybeStart() {
-  console.log('maybeStart');
-  if (localStream && isChannelReady) {
-    createPeerConnection();
-    pc.addStream(localStream);
-    if (isInitiator) {
-      doCall();
-    }
-  }
-}
-
 window.onbeforeunload = function(e){
 	sendMessage('bye');
 }
 
 /////////////////////////////////////////////////////////
 
-function createPeerConnection() {
+function createPeerConnection(sessionId) {
+  var pc;
   try {
     pc = new RTCPeerConnection(pc_config, pc_constraints);
-    pc.onicecandidate = handleIceCandidate;
+    var callback = function(ev) {
+      handleIceCandidate(ev, sessionId);
+    }
+    pc.onicecandidate = callback;
     console.log('Created RTCPeerConnnection with:\n' +
       '  config: \'' + JSON.stringify(pc_config) + '\';\n' +
       '  constraints: \'' + JSON.stringify(pc_constraints) + '\'.');
@@ -159,25 +165,26 @@ function createPeerConnection() {
   }
   pc.onaddstream = handleRemoteStreamAdded;
   pc.onremovestream = handleRemoteStreamRemoved;
-  pc.onnegotiationneeded = handleNegotiation;
-
-  if (isInitiator) {
-    try {
-      // Reliable Data Channels not yet supported in Chrome
-      sendChannel = pc.createDataChannel("sendDataChannel",
-        {reliable: false});
-      sendChannel.onmessage = handleMessage;
-      trace('Created send data channel');
-    } catch (e) {
-      alert('Failed to create data channel. ' +
-        'You need Chrome M25 or later with RtcDataChannel enabled');
-      trace('createDataChannel() failed with exception: ' + e.message);
-    }
-    sendChannel.onopen = handleSendChannelStateChange;
-    sendChannel.onclose = handleSendChannelStateChange;
-  } else {
-    pc.ondatachannel = gotReceiveChannel;
-  }
+  pc.addStream(localStream);
+  pc.remoteSessionid = sessionId;
+  // if (isInitiator) {
+  //   try {
+  //     // Reliable Data Channels not yet supported in Chrome
+  //     sendChannel = pc.createDataChannel("sendDataChannel",
+  //       {reliable: false});
+  //     sendChannel.onmessage = handleMessage;
+  //     trace('Created send data channel');
+  //   } catch (e) {
+  //     alert('Failed to create data channel. ' +
+  //       'You need Chrome M25 or later with RtcDataChannel enabled');
+  //     trace('createDataChannel() failed with exception: ' + e.message);
+  //   }
+  //   sendChannel.onopen = handleSendChannelStateChange;
+  //   sendChannel.onclose = handleSendChannelStateChange;
+  // } else {
+  //   pc.ondatachannel = gotReceiveChannel;
+  // }
+  return pc;
 }
 
 function sendData() {
@@ -245,22 +252,27 @@ function enableMessageInterface(shouldEnable) {
 
 enableMessageInterface(true);
 
-function handleIceCandidate(event) {
-  console.log('handleIceCandidate event: ', event);
+function handleIceCandidate(event, sessionId) {
   if (event.candidate) {
     sendMessage({
-      type: 'candidate',
-      label: event.candidate.sdpMLineIndex,
-      id: event.candidate.sdpMid,
-      candidate: event.candidate.candidate});
+      'from': socket.socket.sessionid,
+      'to': sessionId,
+      'data': {
+        type: 'candidate',
+        label: event.candidate.sdpMLineIndex,
+        id: event.candidate.sdpMid,
+        candidate: event.candidate.candidate 
+      }
+    });
   } else {
     console.log('End of candidates.');
   }
 }
 
-function handleNegotiation(){
-  console.log('negotiating');
-}
+// function handleNegotiation(){
+//   console.log('negotiating');
+//   doCall();     //it should be the new comer's responsibility to call existing peers.
+// }
 
 
 function doCall() {
@@ -276,29 +288,46 @@ function doCall() {
   constraints = sdpConstraints;
   console.log('Sending offer to peer, with constraints: \n' +
     '  \'' + JSON.stringify(constraints) + '\'.');
-  pc.createOffer(setLocalAndSendMessage, function(argument){console.log("create answer callback");console.log(argument)}, constraints);
-}
-
-function doAnswer(message) {
-  console.log('Sending answer to peer.');
-  pc.setRemoteDescription(new RTCSessionDescription(message));
-  pc.createAnswer(setLocalAndSendMessage,function(argument){console.log("create answer callback");console.log(argument)}, sdpConstraints);
-}
-
-function mergeConstraints(cons1, cons2) {
-  var merged = cons1;
-  for (var name in cons2.mandatory) {
-    merged.mandatory[name] = cons2.mandatory[name];
+  console.log(sessionID2Peer);
+  for (var id in sessionID2Peer){
+    (function (sId){
+      sessionID2Peer[sId].createOffer(function(sessionDescription){setLocalAndSendMessage(sessionDescription,sessionID2Peer[sId],sId);}, function(argument){console.log("create answer callback");console.log(argument)}, constraints);
+    })(id);
   }
-  merged.optional.concat(cons2.optional);
-  return merged;
 }
 
-function setLocalAndSendMessage(sessionDescription) {
+/*
+expecting from server:
+{to: sessionID1, from: sessionID2, data: message}
+*/
+function doAnswer(msg) {
+  console.log('Sending answer to peer.');
+  var pc = sessionID2Peer[msg.from];
+  console.log(pc);
+  pc.setRemoteDescription(new RTCSessionDescription(msg.data));
+  pc.addStream(localStream);
+  var successCallback = function(sessionDescription){ 
+    var peer = pc; 
+    var to = msg.from; 
+    setLocalAndSendMessage(sessionDescription, peer, to);
+  }
+  pc.createAnswer(successCallback,function(argument){console.log("create answer callback");console.log(argument)}, sdpConstraints);
+}
+
+// function mergeConstraints(cons1, cons2) {
+//   var merged = cons1;
+//   for (var name in cons2.mandatory) {
+//     merged.mandatory[name] = cons2.mandatory[name];
+//   }
+//   merged.optional.concat(cons2.optional);
+//   return merged;
+// }
+
+function setLocalAndSendMessage(sessionDescription, peer,to) {
   // Set Opus as the preferred codec in SDP if Opus is present.
   sessionDescription.sdp = preferOpus(sessionDescription.sdp);
-  pc.setLocalDescription(sessionDescription);
-  sendMessage(sessionDescription);
+  peer.setLocalDescription(sessionDescription);
+  sendMessage({'from':socket.socket.sessionid,'to': to, 'data': sessionDescription });
 }
 
 function requestTurn() {
@@ -344,12 +373,10 @@ function handleRemoteStreamAdded(event) {
   remoteVideo.setAttribute("autoplay", "");
   peersNum++;
   attachMediaStream(remoteVideo, event.stream);
-  remoteStream = event.stream;
 //  waitForRemoteVideo();
 }
 
 function handleRemoteStreamRemoved(event) {
-  peersNum--;
   console.log('Remote stream removed. Event: ', event);
 }
 
