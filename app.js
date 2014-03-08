@@ -3,6 +3,7 @@ var app = express();
 var server = require('http').createServer(app);
 var io = require('socket.io').listen(server);
 app.set('view engine', 'jade');
+app.set('port', process.env.PORT || 3000);
 
 io.sockets.on('connection', function (socket){
 
@@ -42,7 +43,7 @@ io.sockets.on('connection', function (socket){
 
 
 app.use('/', express.static(__dirname + '/public'));
-server.listen(3000, function() {
+server.listen(app.get('port'), function() {
 	console.log('listening on port %d', server.address().port );
 });
 
