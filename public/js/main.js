@@ -146,7 +146,9 @@ var constraints = {video: true, audio: true};
 getUserMedia(constraints, handleUserMedia, handleUserMediaError);
 console.log('Getting user media with constraints', constraints);
 
-// requestTurn();
+window.turnserversDotComAPI.iceServers(function(data) {
+  pc_config['iceServers'].push(data);
+});
 
 window.onbeforeunload = function(e){
 	sendMessage('bye');
