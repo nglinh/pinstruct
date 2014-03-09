@@ -147,7 +147,7 @@ getUserMedia(constraints, handleUserMedia, handleUserMediaError);
 console.log('Getting user media with constraints', constraints);
 
 window.turnserversDotComAPI.iceServers(function(data) {
-  pc_config['iceServers'].push(data);
+  pc_config['iceServers'] = data;
 });
 
 window.onbeforeunload = function(e){
