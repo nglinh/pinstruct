@@ -12,11 +12,13 @@ var localStream;
 var turnReady;
 var peersNum = 0;
 var sessionID2Peer = {} //hash session id to peer RTCPeerConnection object.
+var stack = [];
 var turnServer = {username: 'linh_nguyen_hien%40nus.edu.sg',
 turn: 'numb.viagenie.ca:3478',
 password: 'iamathere'};
 
-var pc_config = {'iceServers': [{'url': 'stun:stun.l.google.com:19302'}]};
+var pc_config = {'iceServers':[{'url':'stun:23.21.150.121'}]}; // number IP
+
 
 var pc_constraints = {
   'optional': [
@@ -111,7 +113,13 @@ socket.on('message', function (msg){
       sdpMid:msg.data.id,
       candidate:msg.data.candidate});
     var pc = sessionID2Peer[msg.from];
-    pc.addIceCandidate(candidate);
+    if (!pc.remoteDescription){
+      stack.push(candidate);
+    }
+    else {
+      console.log('adding ice candidate');
+      pc.addIceCandidate(candidate);
+    }
   }
 });
 
@@ -133,7 +141,7 @@ function handleUserMediaError(error){
   console.log('getUserMedia error: ', error);
 }
 
-var constraints = {video: true};
+var constraints = {video: true, audio: true};
 
 getUserMedia(constraints, handleUserMedia, handleUserMediaError);
 console.log('Getting user media with constraints', constraints);
@@ -166,7 +174,9 @@ function createPeerConnection(sessionId) {
   pc.onaddstream = handleRemoteStreamAdded;
   pc.onremovestream = handleRemoteStreamRemoved;
   pc.addStream(localStream);
-  pc.remoteSessionid = sessionId;
+  pc.onnegotiationneeded = function() {
+    console.log('negotiating');
+  }
   // if (isInitiator) {
   //   try {
   //     // Reliable Data Channels not yet supported in Chrome
@@ -265,6 +275,7 @@ function handleIceCandidate(event, sessionId) {
       }
     });
   } else {
+    console.log(event);
     console.log('End of candidates.');
   }
 }
@@ -303,15 +314,27 @@ expecting from server:
 function doAnswer(msg) {
   console.log('Sending answer to peer.');
   var pc = sessionID2Peer[msg.from];
-  console.log(pc);
-  pc.setRemoteDescription(new RTCSessionDescription(msg.data));
-  pc.addStream(localStream);
-  var successCallback = function(sessionDescription){ 
-    var peer = pc; 
-    var to = msg.from; 
-    setLocalAndSendMessage(sessionDescription, peer, to);
-  }
-  pc.createAnswer(successCallback,function(argument){console.log("create answer callback");console.log(argument)}, sdpConstraints);
+  window.pc = pc;
+  (function(pc) {
+    var callback = function() {
+      for (var i in stack) {
+        console.log('adding ice candidate');
+        pc.addIceCandidate(stack[i]);
+        delete stack[i];
+      }
+      var successCallback = function(sessionDescription){ 
+        console.log('success callback');
+        var peer = pc; 
+        var to = msg.from; 
+        setLocalAndSendMessage(sessionDescription, peer, to);
+
+      }
+      pc.createAnswer(successCallback,function(argument){console.log("create answer callback");console.log(argument)}, sdpConstraints);
+    }
+    pc.setRemoteDescription(new RTCSessionDescription(msg.data), callback);
+
+  })(pc);
+
 }
 
 // function mergeConstraints(cons1, cons2) {
