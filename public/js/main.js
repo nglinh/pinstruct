@@ -146,7 +146,7 @@ var constraints = {video: true, audio: true};
 getUserMedia(constraints, handleUserMedia, handleUserMediaError);
 console.log('Getting user media with constraints', constraints);
 
-requestTurn();
+// requestTurn();
 
 window.onbeforeunload = function(e){
 	sendMessage('bye');
