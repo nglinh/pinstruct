@@ -146,7 +146,7 @@ var constraints = {video: true, audio: true};
 getUserMedia(constraints, handleUserMedia, handleUserMediaError);
 console.log('Getting user media with constraints', constraints);
 
-// requestTurn();
+requestTurn();
 
 window.onbeforeunload = function(e){
 	sendMessage('bye');
@@ -374,7 +374,7 @@ function requestTurn() {
     //   }
     // };
     pc_config.iceServers.push({
-      'url': 'turn:' + turnServer.turn + ':3478',
+      'url': 'turn:' + turnServer.turn,
       'username': turnServer.username,
       'credential': turnServer.password
     });
