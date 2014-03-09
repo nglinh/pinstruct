@@ -17,7 +17,7 @@ var turnServer = {username: 'linh_nguyen_hien%40nus.edu.sg',
 turn: 'numb.viagenie.ca:3478',
 password: 'iamathere'};
 
-var pc_config = {'iceServers':[{'url':'stun:23.21.150.121'}]}; // number IP
+var pc_config = {'iceServers':[{'url':'stun:stun.l.google.com:19302'}]}; // number IP
 
 
 var pc_constraints = {
