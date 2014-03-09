@@ -170,6 +170,9 @@ function createPeerConnection(sessionId) {
   } catch (e) {
     console.log(e);
     console.log('Failed to create PeerConnection, exception: ' + e.message);
+    console.log('Tried to RTCPeerConnnection with:\n' +
+      '  config: \'' + JSON.stringify(pc_config) + '\';\n' +
+      '  constraints: \'' + JSON.stringify(pc_constraints) + '\'.');
     alert('Cannot create RTCPeerConnection object.');
     return;
   }
